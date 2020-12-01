@@ -63,7 +63,7 @@ fn calc_result_two(numbers: Vec<i32>) -> Option<(i32, i32, i32)> {
 fn calc_result_three(numbers: Vec<i32>) -> Option<(i32, i32, i32, i32)> {
     let max_x = numbers.len() - 3;
     let max_y = max_x + 1;
-    let max_z = max_x + 1;
+    let max_z = max_y + 1;
     for x in 0..=max_x {
         let val_x = numbers[x];
         if val_x > YEAR {
