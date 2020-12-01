@@ -9,9 +9,7 @@
 				"$rustc"
 			],
 			"label": "Rust: cargo run test",
-			"group": {
-				"kind": "build"
-			}
+			"group": "build"
 		},
 		{
 			"type": "shell",
@@ -21,10 +19,7 @@
 				"$rustc"
 			],
 			"label": "Rust: cargo run input",
-			"group": {
-				"kind": "build",
-				"isDefault": true
-			}
+			"group": "build"
 		}
 	]
 }
