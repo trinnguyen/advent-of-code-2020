@@ -13,7 +13,7 @@ fn part_1(str: &str) -> u32 {
     loop {
         if let Some(pass) = next_passport(&mut chars) {
             println!("next: {:?}", pass);
-            if pass.is_valid() {
+            if pass.is_valid_presence() {
                 cnt = cnt + 1;
             }
         } else {
@@ -36,16 +36,16 @@ fn next_passport(chars: &mut str::Chars) -> Option<PassKey> {
         match tok {
             // key followed by value
             Some(Token::Key{key}) => {
-                if let Some(Token::Value{val: _}) = next_tok(chars) {
+                if let Some(Token::Value{val}) = next_tok(chars) {
                     match key.as_str() {
-                        "byr" => pass.byr = true,
-                        "iyr" => pass.iyr = true,
-                        "eyr" => pass.eyr = true,
-                        "hgt" => pass.hgt = true,
-                        "hcl" => pass.hcl = true,
-                        "ecl" => pass.ecl = true,
-                        "pid" => pass.pid = true,
-                        "cid" => pass.cid = true,
+                        "byr" => pass.byr = Some(val),
+                        "iyr" => pass.iyr = Some(val),
+                        "eyr" => pass.eyr = Some(val),
+                        "hgt" => pass.hgt = Some(val),
+                        "hcl" => pass.hcl = Some(val),
+                        "ecl" => pass.ecl = Some(val),
+                        "pid" => pass.pid = Some(val),
+                        "cid" => pass.cid = Some(val),
                         _ => panic!("unexpected token key: {}", key)
                     };
                 } else {
@@ -106,18 +106,31 @@ enum Token {
 
 #[derive(Default, Debug)]
 struct PassKey {
-    byr: bool,
-    iyr: bool,
-    eyr: bool,
-    hgt: bool,
-    hcl: bool,
-    ecl: bool,
-    pid: bool,
-    cid: bool
+    byr: Option<String>,
+    iyr: Option<String>,
+    eyr: Option<String>,
+    hgt: Option<String>,
+    hcl: Option<String>,
+    ecl: Option<String>,
+    pid: Option<String>,
+    cid: Option<String>
 }
 
 impl PassKey {
-    fn is_valid(&self) -> bool {
-        return self.byr && self.iyr && self.eyr && self.hgt && self.hcl && self.ecl && self.pid;
+    fn is_valid_presence(&self) -> bool {
+        return self.has_value(&self.byr) 
+            && self.has_value(&self.iyr) 
+            && self.has_value(&self.eyr) 
+            && self.has_value(&self.hgt)
+            && self.has_value(&self.hcl)
+            && self.has_value(&self.ecl)
+            && self.has_value(&self.pid);
+    }
+    
+    fn has_value(&self, opt: &Option<String>) -> bool {
+        return match opt {
+            Some(_) => true,
+            _ => false
+        }
     }
 }
