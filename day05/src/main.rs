@@ -5,12 +5,13 @@ fn main() {
     std::io::stdin().read_to_string(&mut str).unwrap();
     
     println!("result part-1: {:?}", part_1(str.as_str()));
+    println!("result part-2: {:?}", part_2(str.as_str()));
 }
 
 fn part_1(str: &str) -> u32 {
     let mut max: u32 = 0;
     for line in str.lines() {
-        let id = get_id(line);
+        let id = get_id(get_seat(line));
         if id > max {
             max = id;
         }
@@ -19,8 +20,38 @@ fn part_1(str: &str) -> u32 {
     return max
 }
 
-fn get_id(str: &str) -> u32 {
-    let seat = get_seat(str);
+fn part_2(str: &str) -> u32 {
+    // filter id
+    let mut id = Vec::new();
+    for line in str.lines() {
+        let seat = get_seat(line);
+        if seat.0 != 0 && seat.0 != 127 {
+            id.push(get_id(seat));
+        }
+    }
+
+    // sort
+    if id.is_empty() {
+        panic!("missing data");
+    }
+    id.sort();
+
+    // find missing piece
+    let mut prev = id[0];
+    for i in 1..id.len() {
+        let val = id[i];
+        if val - 1 != prev {
+            // invalid. val is ID + 1, prev is ID - 1
+            return val - 1;
+        }
+        
+        prev = val;
+    }
+
+    panic!("no ID found");
+}
+
+fn get_id(seat: (u32, u32)) -> u32 {
     return seat.0 * 8 + seat.1;
 }
 
@@ -62,7 +93,7 @@ fn get_value_in_range(bytes: &[u8], min: u32, max: u32, lower: u8, upper: u8) ->
 
 #[cfg(test)]
 mod tests {
-    use crate::{get_id, get_seat};
+    use crate::{get_seat};
 
     #[test]
     fn test_get_seat() {
@@ -70,12 +101,5 @@ mod tests {
         assert_eq!((70, 7), get_seat("BFFFBBFRRR"));
         assert_eq!((14, 7), get_seat("FFFBBBFRRR"));
         assert_eq!((102, 4), get_seat("BBFFBBFRLL"));
-    }
-
-    #[test]
-    fn test_get_id() {
-        assert_eq!(567, get_id("BFFFBBFRRR"));
-        assert_eq!(119, get_id("FFFBBBFRRR"));
-        assert_eq!(820, get_id("BBFFBBFRLL"));
     }
 }
