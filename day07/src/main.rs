@@ -1,19 +1,93 @@
-use std::{collections::HashSet, io::Read};
-use std::str::Lines;
-use std::collections::{LinkedList, HashMap};
+use std::io::Read;
+use std::collections::{LinkedList, HashSet, HashMap};
 
 fn main() {
     let mut str = String::new();
     std::io::stdin().read_to_string(&mut str).unwrap();
 
-    println!("result part-1: {:?}", part_1(""));
+    println!("result part-1: {:?}", part_1(&str));
 }
 
 fn part_1(str: &str) -> usize {
+    let gr = get_graph(str);
+    return gr.count_all_reachable_by_name("shiny gold");
+}
+
+fn get_graph(str: &str) -> RuleGraph {
+    let mut gr = RuleGraph::new();
     for line in str.lines() {
-        
+        let rule = Rule::from(line);
+        println!("rule: {:?}", rule);
+        gr.add_rule(&rule);
     }
-    return 0;
+    
+    gr
+}
+
+#[derive(Debug)]
+struct Rule {
+    src: String,
+    vec_dst: Vec<(String, u32)>,
+}
+
+impl Rule {
+    /// get rule from line
+    fn from(line: &str) -> Self {
+        let mut iter = line.split(" bags contain ");
+        match (iter.next(), iter.next()) {
+            (Some(src), Some(trail)) => {
+                // childs
+                let vec: Vec<(String, u32)> = if trail.eq("no other bags.") {
+                    Vec::new()
+                } else {
+                    trail.split(", ").map(|t| Rule::get_child(t)).collect()
+                };
+
+                return Rule {
+                    src: src.to_string(),
+                    vec_dst: vec
+                };
+            },
+            _ => panic!("line format is invalid")
+        }
+    }
+
+    /// get child from line
+    ///
+    /// input:
+    ///   example: 1 bright white bag
+    ///   example: 2 muted yellow bags
+    ///
+    /// output:
+    ///   (bright white, 1)
+    ///   (muted yellow, 2)
+    fn get_child(str: &str) -> (String, u32) {
+        let mut iter = str.split(' ');
+        let x = iter.next();
+        match x {
+            Some(s_num) => {
+                let n: u32 = s_num.parse().unwrap();
+
+                // get name
+                let mut name = String::new();
+                loop {
+                    match iter.next() {
+                        Some("bag") | Some("bag.") | Some("bags") | Some("bags.") => break,
+                        Some(t) => { 
+                            if !name.is_empty() {
+                                name.push(' ');
+                            }
+                            name.push_str(t); 
+                        },
+                        _ => break
+                    }
+                }
+
+                return (name, n)
+            },
+            _ => panic!("missing number")
+        }
+    }
 }
 
 /// model the bag rules using a directed graph (reversed)
@@ -45,6 +119,12 @@ impl RuleGraph {
         return RuleGraph {
             list: Vec::new(),
             map_name: HashMap::new()
+        }
+    }
+
+    fn add_rule(&mut self, rule: &Rule) {
+        for dst in &rule.vec_dst {
+            self.add_edge(&dst.0, &rule.src);
         }
     }
 
@@ -106,7 +186,7 @@ impl RuleGraph {
 mod tests {
     
     use std::collections::HashSet;
-    use crate::RuleGraph;
+    use crate::{RuleGraph, Rule};
 
     #[test]
     fn test_graph() {
@@ -124,5 +204,11 @@ mod tests {
         expected.insert(2);
         expected.insert(1);
         assert_eq!(expected, reach);
+    }
+
+    #[test]
+    fn test_get_child() {
+        assert_eq!(("bright white".to_string(), 1), Rule::get_child("1 bright white bag"));
+        assert_eq!(("muted yellow".to_string(), 2), Rule::get_child("2 muted yellow bags"));
     }
 }
