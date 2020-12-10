@@ -1,4 +1,4 @@
-use std::io::Read;
+use std::{fmt, io::Read};
 use std::collections::{LinkedList, HashSet, HashMap};
 
 fn main() {
@@ -6,22 +6,39 @@ fn main() {
     std::io::stdin().read_to_string(&mut str).unwrap();
 
     println!("result part-1: {:?}", part_1(&str));
+    println!("result part-2: {:?}", part_2(&str));
 }
 
 fn part_1(str: &str) -> usize {
-    let gr = get_graph(str);
-    return gr.count_all_reachable_by_name("shiny gold");
-}
-
-fn get_graph(str: &str) -> RuleGraph {
     let mut gr = RuleGraph::new();
     for line in str.lines() {
         let rule = Rule::from(line);
-        println!("rule: {:?}", rule);
-        gr.add_rule(&rule);
+        
+        // add rule
+        for dst in &rule.vec_dst {
+            gr.add_edge(&dst.0, &rule.src, 0);
+        }
     }
     
-    gr
+    gr.get_all_reachable(gr.get_index("shiny gold")).len()
+}
+
+fn part_2(str: &str) -> u32 {
+    let mut gr = RuleGraph::new();
+    for line in str.lines() {
+        let rule = Rule::from(line);
+        
+        // build reversed graph compared to part 1
+        for dst in &rule.vec_dst {
+            gr.add_edge(&rule.src, &dst.0, dst.1);
+        }
+    }
+
+    // input
+    let idx: usize = gr.get_index("shiny gold");
+
+    // travel graph and sum
+    return gr.sum_reachable_and_weight(idx);
 }
 
 #[derive(Debug)]
@@ -109,8 +126,23 @@ impl Rule {
 /// 2 -> 4
 #[derive(Debug)]
 struct RuleGraph {
-    list: Vec<LinkedList<usize>>,
+    
+    /// each item in the linked list represents an index and weight
+    list: Vec<LinkedList<(usize, u32)>>,
     map_name: HashMap<String, usize>
+}
+
+impl std::fmt::Display for RuleGraph {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let _ = writeln!(f, "{:?}", self.map_name);
+        let mut idx: usize = 0;
+        for elem in &self.list {
+            let _ = writeln!(f, "{}: {:?}", idx, elem);
+            idx = idx + 1;
+        }
+
+        Ok(())
+    }
 }
 
 impl RuleGraph {
@@ -122,17 +154,11 @@ impl RuleGraph {
         }
     }
 
-    fn add_rule(&mut self, rule: &Rule) {
-        for dst in &rule.vec_dst {
-            self.add_edge(&dst.0, &rule.src);
-        }
-    }
-
-    fn add_edge(&mut self, src: &str, dst: &str) {
+    fn add_edge(&mut self, src: &str, dst: &str, weight: u32) {
         let idx_src = self.get_or_update_name(src);
         let idx_dst = self.get_or_update_name(dst);
         if let Some(linked_src) = self.list.get_mut(idx_src) {
-            (*linked_src).push_back(idx_dst)
+            (*linked_src).push_back((idx_dst, weight))
         } else {
             panic!("unexpected error on getting linked list")
         }
@@ -156,7 +182,7 @@ impl RuleGraph {
 
         // iterate over all successors
         let linked_list = &self.list[index];
-        for item in linked_list.iter() {
+        for (item, _) in linked_list.iter() {
             if set.contains(item) {
                 continue;
             }
@@ -172,14 +198,29 @@ impl RuleGraph {
         return set;
     }
 
-    fn count_all_reachable_by_name(&self, name: &str) -> usize {
-        if let Some(idx) = self.map_name.get(name) {
-            return self.get_all_reachable(*idx).len();
+    fn get_index(&self, name: &str) -> usize {
+        match self.map_name.get(name) {
+            Some(idx) => *idx,
+            _ => panic!("no bag name {} is exist", name)
         }
-
-        panic!("no bag name {} is exist", name)
     }
 
+    fn sum_reachable_and_weight(&self, index: usize) -> u32 {
+        if index >= self.list.len() {
+            panic!("out of range")
+        }
+
+        let mut sum: u32 = 0;
+
+        // iterate over all successors
+        let linked_list = &self.list[index];
+        for (item, weight) in linked_list.iter() {
+            let s_child = self.sum_reachable_and_weight(*item);
+            sum = sum + weight * (1 + s_child);
+        }
+
+        sum
+    }
 }
 
 #[cfg(test)]
@@ -191,10 +232,10 @@ mod tests {
     #[test]
     fn test_graph() {
         let mut gr = RuleGraph::new();
-        gr.add_edge("A" ,"B");
-        gr.add_edge("A" ,"C");
-        gr.add_edge("B" ,"D");
-        gr.add_edge("E" ,"D");
+        gr.add_edge("A" ,"B", 0);
+        gr.add_edge("A" ,"C", 0);
+        gr.add_edge("B" ,"D", 0);
+        gr.add_edge("E" ,"D", 0);
     
         println!("{:?}", gr);
     
