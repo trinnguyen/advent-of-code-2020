@@ -1,16 +1,23 @@
-use std::collections::{HashMap, HashSet, LinkedList};
-use std::{fmt, io::Read};
+use std::collections::{HashSet};
+use std::{io::Read};
 
 fn main() {
     let mut str = String::new();
     std::io::stdin().read_to_string(&mut str).unwrap();
 
     println!("result part-1: {:?}", part_1(&str));
+    println!("result part-2: {:?}", part_2(&str));
 }
 
 fn part_1(str: &str) -> i32 {
     let mut program = Program::from(str);
-    program.execute()
+    program.execute();
+    program.reg_acc
+}
+
+fn part_2(str: &str) -> i32 {
+    let mut program = Program::from(str);
+    program.brute_force_fix()
 }
 
 struct Program {
@@ -24,7 +31,10 @@ struct Program {
     /// program counter
     pc: usize,
 
-    // visitted instr index
+    /// previous program counter
+    prev_pc: usize,
+
+    /// visitted instr index
     cached_inst: HashSet<usize>
 }
 
@@ -42,41 +52,84 @@ impl Program {
             code_data,
             reg_acc: 0,
             pc: 0,
-            cached_inst: HashSet::new()
+            prev_pc: 0,
+            cached_inst: HashSet::new(),
         }
+    }
+
+    /// brute force finding the invalid instruction
+    /// switch every jmp/nop and execute the code data
+    fn brute_force_fix(&mut self) -> i32 {
+
+        let len = self.code_data.len();
+        for i in 0..len {
+            let item = self.code_data.get(i);
+            match item {
+                Some(Inst::Jmp(_)) | Some(Inst::Nop(_)) => {
+                    // execute
+                    self.fix_instr(i);
+                    if !self.execute() {
+                        // still getting error, reverse the instr and continue
+                        self.fix_instr(i);
+                    } else {
+                        return self.reg_acc
+                    }
+                },
+                _ => continue
+            }
+        }
+
+        panic!("no solution found")
+    }
+
+    fn fix_instr(&mut self, index: usize) {
+        let new_instr = match self.code_data.get(index) {
+            Some(Inst::Nop(val)) => Inst::Jmp(*val),
+            Some(Inst::Jmp(val)) => Inst::Nop(*val),
+            _ => panic!("failed to get instr"),
+        };
+
+        let _ = std::mem::replace(&mut self.code_data[index], new_instr);
     }
 
     /// start the program and stop at second-called instruction
     /// return value of accumulator variable
-    fn execute(&mut self) -> i32 {
+    fn execute(&mut self) -> bool {
         // reset program
-        self.reg_acc = 0;
-        self.pc = 0;
-        self.cached_inst.clear();
+        self.reset();
 
         // continuously executing the instruction
         loop {
             if self.cached_inst.contains(&self.pc) {
-                break
+                return false
             }
 
             self.execute_instr();
+
+            if self.pc == self.code_data.len() {
+                break;
+            }
         }
 
-        // return value of acc
-        self.reg_acc
+        return true
+    }
+
+    fn reset(&mut self) {
+        self.reg_acc = 0;
+        self.pc = 0;
+        self.prev_pc = 0;
+        self.cached_inst.clear();
     }
 
     /// execute current instruction and update pc
     fn execute_instr(&mut self) {
-
         let instr = self.code_data.get(self.pc);
         let mut move_pc: i32 = 1;
         match instr {
             Some(Inst::Jmp(val)) => move_pc = *val,
             Some(Inst::Acc(val)) => self.reg_acc = self.reg_acc + val,
-            Some(Inst::Nop) => (),
-            _ => panic!("unexpected error, pc is out of index")
+            Some(Inst::Nop(_)) => (),
+            _ => panic!("unexpected error, pc is out of index"),
         }
         self.cached_inst.insert(self.pc);
         self.update_pc_by(move_pc)
@@ -84,9 +137,10 @@ impl Program {
 
     fn update_pc_by(&mut self, val: i32) {
         let res = (self.pc as i32) + val;
-        if res < 0 || res >= self.code_data.len() as i32 {
+        if res < 0 || res > self.code_data.len() as i32 {
             panic!("jump of out range")
         }
+        self.prev_pc = self.pc;
         self.pc = res as usize
     }
 }
@@ -95,7 +149,7 @@ impl Program {
 enum Inst {
     Acc(i32),
     Jmp(i32),
-    Nop,
+    Nop(i32),
 }
 
 impl Inst {
@@ -121,7 +175,7 @@ impl Inst {
 
                 // parse code
                 match code {
-                    "nop" => Inst::Nop,
+                    "nop" => Inst::Nop(num),
                     "acc" => Inst::Acc(num),
                     "jmp" => Inst::Jmp(num),
                     _ => panic!("expect code nop or acc or jmp"),
@@ -138,7 +192,9 @@ mod tests {
 
     #[test]
     fn test_inst_from() {
-        assert_eq!(Inst::Nop, Inst::from("nop +0"));
+        assert_eq!(Inst::Nop(0), Inst::from("nop +0"));
+        assert_eq!(Inst::Nop(1), Inst::from("nop +1"));
+        assert_eq!(Inst::Nop(-1), Inst::from("nop -1"));
         assert_eq!(Inst::Acc(1), Inst::from("acc +1"));
         assert_eq!(Inst::Acc(-1), Inst::from("acc -1"));
         assert_eq!(Inst::Acc(0), Inst::from("acc +0"));
