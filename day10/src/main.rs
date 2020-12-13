@@ -1,10 +1,11 @@
 use core::panic;
-use std::{io::Read};
+use std::{collections::{HashMap}, io::Read};
 
 fn main() {
     let mut str = String::new();
     std::io::stdin().read_to_string(&mut str).unwrap();
     println!("result part-1: {:?}", part_1(&str));
+    println!("result part-2: {:?}", part_2(&str));
 }
 
 fn part_1(str: &str) -> u32 {
@@ -12,6 +13,57 @@ fn part_1(str: &str) -> u32 {
     println!("{}, {}", j1, j3);
     j1 * j3
 }
+
+fn part_2(str: &str) -> u64 {
+    let mut vec: Vec<u64> = Vec::new();
+    vec.push(0);
+    str.lines().map(|l| l.trim().parse::<u64>().unwrap()).for_each(|i| vec.push(i));
+    vec.sort();
+
+    // println!("{:?}", vec);
+    let mut map: HashMap<usize, u64> = HashMap::new();
+    travel(&vec, 0, &mut map)
+}
+
+/// travel and count all paths
+/// 
+/// use map as cache
+fn travel(vec: &Vec<u64>, index: usize, map: &mut HashMap<usize, u64>) -> u64 {
+
+    // return if having cache
+    if let Some(cache) = map.get(&index) {
+        return *cache;
+    }
+
+    // finish
+    if index == vec.len() - 1 {
+        map.insert(index, 1);
+        return 1
+    }
+
+    let val = vec.get(index).unwrap();
+    let successor = find_successor(vec, &index, val);
+    // println!("travel: base {} -> successor: {}", val, successor);
+
+    let mut sum: u64 = 0;
+    for i in 1..=successor {
+        sum = sum + travel(vec, index + i, map);
+    }
+
+    map.insert(index, sum);
+    sum
+}
+
+fn find_successor(vec: &Vec<u64>, next: &usize, val: &u64) -> usize {
+    let i = *next;
+    match (vec.get(i + 1), vec.get(i + 2), vec.get(i + 3)) {
+        (Some(x), Some(y), Some(z)) if x - val <= 3 && y - val <= 3 && z - val <= 3 => 3,
+        (Some(x), Some(y), _) if x - val <= 3 && y - val <= 3 => 2,
+        (Some(x), _, _) if x - val <= 3 => 1,
+        _ => 0
+    }
+}
+
 
 /// find the chain of 1-jolt and 3-jolt adapters
 /// 
@@ -52,7 +104,7 @@ fn cal_jolt_differences(str: &str) -> (u32, u32) {
 
 #[cfg(test)]
 mod tests {
-    use crate::cal_jolt_differences;
+    use crate::{cal_jolt_differences, part_2};
 
     #[test]
     fn test_part_1() {
@@ -68,5 +120,21 @@ mod tests {
         12
         4";
         assert_eq!((7, 5), cal_jolt_differences(src));
+    }
+
+    #[test]
+    fn test_part_2() {
+        let src = "16
+        10
+        15
+        5
+        1
+        11
+        7
+        19
+        6
+        12
+        4";
+        assert_eq!(8, part_2(src));
     }
 }
