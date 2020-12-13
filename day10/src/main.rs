@@ -40,16 +40,9 @@ fn travel(vec: &Vec<u64>, index: usize, map: &mut HashMap<usize, u64>) -> u64 {
         map.insert(index, 1);
         return 1
     }
-
-    let val = vec.get(index).unwrap();
-    let successor = find_successor(vec, &index, val);
-    // println!("travel: base {} -> successor: {}", val, successor);
-
-    let mut sum: u64 = 0;
-    for i in 1..=successor {
-        sum = sum + travel(vec, index + i, map);
-    }
-
+    
+    let successor = find_successor(vec, &index, vec.get(index).unwrap());
+    let sum = (1..=successor).into_iter().map(|i| travel(vec, index + i, map)).sum();
     map.insert(index, sum);
     sum
 }
