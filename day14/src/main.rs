@@ -1,10 +1,11 @@
-use std::collections::HashMap;
+use std::collections::{HashMap};
 use std::io::Read;
 
 fn main() {
     let mut str = String::new();
     std::io::stdin().read_to_string(&mut str).unwrap();
     println!("result part-1: {:?}", part_1(&str));
+    println!("result part-2: {:?}", part_2(&str));
 }
 
 fn part_1(str: &str) -> u64 {
@@ -14,7 +15,7 @@ fn part_1(str: &str) -> u64 {
     str.lines().for_each(|line| match parse_line(line) {
         Instr::Mask(t_mask) => mask = t_mask,
         Instr::Mem(addr, val) => {
-            let new_val = mask_value(&mask, val);
+            let new_val = mask_value_1(&mask, val);
             map_mem.insert(addr, new_val);
         }
     });
@@ -22,10 +23,27 @@ fn part_1(str: &str) -> u64 {
     map_mem.values().sum()
 }
 
-fn mask_value(mask: &Vec<char>, val: u64) -> u64 {
-    let bin: Vec<char> = dec_to_bin(val);
+fn part_2(str: &str) -> u64 {
 
+    let mut mask: Vec<char> = Vec::new();
+    let mut map_mem: HashMap<usize, u64> = HashMap::new();
+
+    str.lines().for_each(|line| match parse_line(line) {
+        Instr::Mask(t_mask) => mask = t_mask,
+        Instr::Mem(addr, val) => {
+            let vec_addr = mask_values_2(&mask, addr);
+            vec_addr.iter().for_each(|i| {
+                map_mem.insert(*i, val);
+            });
+        }
+    });
+
+    map_mem.values().sum()
+}
+
+fn mask_value_1(mask: &Vec<char>, val: u64) -> u64 {
     // mask
+    let bin: Vec<char> = dec_to_bin(val);
     let new_bin = bin.iter().enumerate().map(|(i,v)| {
         match mask.get(i) {
             Some('1') => '1',
@@ -35,6 +53,72 @@ fn mask_value(mask: &Vec<char>, val: u64) -> u64 {
     }).collect();
 
     bin_to_dec(new_bin)
+}
+
+/// compute set of address
+fn mask_values_2(mask: &Vec<char>, addr: usize) -> Vec<usize> {
+    // mask
+    let bin: Vec<char> = dec_to_bin(addr as u64);
+    let mut x_locs: Vec<usize> = Vec::new();
+    let masked_bin: Vec<char> = bin.iter().enumerate().map(|(i,v)| {
+        match mask.get(i) {
+            Some('1') => '1',
+            Some('0') => *v,
+            Some('X') => {
+                x_locs.push(i);
+                'X'
+            },
+            _ => panic!("invalid mask")
+        }
+    }).collect();
+
+    let mut vec_result: Vec<usize> = Vec::new();
+    let paths = combinations(&x_locs);
+    for path in paths {
+        let tmp_bin: Vec<char> = masked_bin.iter().enumerate().map(|(i,v)|
+            if let Some(p_val) = path.get(&i) {
+                *p_val
+            } else {
+                *v
+            }
+        ).collect();
+
+        vec_result.push(bin_to_dec(tmp_bin) as usize);
+
+    }
+
+    vec_result
+}
+
+fn combinations(locs: &Vec<usize>) -> Vec<HashMap<usize, char>> {
+    let mut paths: Vec<HashMap<usize, char>> = Vec::new();
+    let mut stack: Vec<(usize, char)> = Vec::new();
+    travel(&mut paths, &mut stack, &locs[0..locs.len()]);
+
+    paths
+}
+
+fn travel(paths: &mut Vec<HashMap<usize, char>>, stack: &mut Vec<(usize, char)>, locs: &[usize]) {
+    if locs.len() == 0 {
+        // copy stack in reversed order
+        let mut path: HashMap<usize, char> = HashMap::new();
+        stack.iter().for_each(|(i, v)| {
+            path.insert(*i, *v);
+        });
+        paths.push(path);
+    } else {
+        // 2 branches
+        let i = locs[0];
+
+        stack.push((i, '0'));
+        travel(paths, stack, &locs[1..locs.len()]);
+
+        stack.push((i, '1'));
+        travel(paths, stack, &locs[1..locs.len()]);
+    }
+
+    // pop stack
+    stack.pop();
 }
 
 fn dec_to_bin(val: u64) -> Vec<char> {
@@ -64,7 +148,11 @@ fn dec_to_bin(val: u64) -> Vec<char> {
 }
 
 fn bin_to_dec(bin: Vec<char>) -> u64 {
-    bin.iter().rev().enumerate().map(|(i,v)| {
+    cal_bin_to_dec(bin.iter())
+}
+
+fn cal_bin_to_dec(iter: std::slice::Iter<char>) -> u64 {
+    iter.rev().enumerate().map(|(i,v)| {
         if *v == '1' {
             2u64.pow(i as u32)
         } else {
@@ -114,7 +202,7 @@ enum Instr {
 #[cfg(test)]
 mod tests {
     use crate::{bin_to_dec, dec_to_bin};
-    use crate::mask_value;
+    use crate::mask_value_1;
 
     #[test]
     fn test_dec_to_bin() {
@@ -154,7 +242,7 @@ mod tests {
     fn test_mask_value() {
         assert_eq!(
             73,
-            mask_value(
+            mask_value_1(
                 &"XXXXXXXXXXXXXXXXXXXXXXXXXXXXX1XXXX0X"
                     .chars()
                     .collect::<Vec<char>>(),
@@ -164,7 +252,7 @@ mod tests {
 
         assert_eq!(
             101,
-            mask_value(
+            mask_value_1(
                 &"XXXXXXXXXXXXXXXXXXXXXXXXXXXXX1XXXX0X"
                     .chars()
                     .collect::<Vec<char>>(),
@@ -174,7 +262,7 @@ mod tests {
 
         assert_eq!(
             64,
-            mask_value(
+            mask_value_1(
                 &"XXXXXXXXXXXXXXXXXXXXXXXXXXXXX1XXXX0X"
                     .chars()
                     .collect::<Vec<char>>(),
