@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::io::Read;
 
 fn main() {
@@ -21,7 +20,13 @@ fn part_2(str: &str) -> u32 {
 fn calc_number(vec: &Vec<u32>, pos: usize) -> u32 {
     let mut last_num = 0;
     let mut turn: usize = 0;
-    let mut map: HashMap<u32, (usize, usize)> = HashMap::new();
+    // let mut map: HashMap<u32, (usize, usize)> = HashMap::new();
+
+    let size = pos.max(*vec.iter().max().unwrap() as usize);
+    let mut cached: Vec<(usize, usize)> = Vec::with_capacity(size);
+    for _ in 0..size {
+        cached.push((0, 0));
+    }
 
     while turn < pos {
         turn = turn + 1;
@@ -30,28 +35,18 @@ fn calc_number(vec: &Vec<u32>, pos: usize) -> u32 {
             Some(v) => *v,
             None => {
                 // check last number
-                match map.get(&last_num) {
-                    Some((idx_fst, idx_snd)) => {
-                        // it was spoken only once (last turn was its first time)
-                        if *idx_snd == 0 {
-                            0
-                        } else {
-                            // subtract 
-                            (idx_snd - idx_fst) as u32
-                        }
-                    },
+                match cached.get(last_num as usize) {
+                    Some((0, _)) => 0, // it was spoken only once (last turn was its first time)
+                    Some((idx_fst, idx_snd)) => (idx_snd - idx_fst) as u32, // spoken more than once
                     None => panic!("unexpected error") // never catch
                 }
             }
         };
 
-        // update map
-        let new_pair: (usize, usize) = match map.get(&last_num) {
-            Some((idx_fst, 0)) => (*idx_fst, turn),
-            Some((_, idx_snd)) => (*idx_snd, turn),
-            None => (turn, 0)
-        };
-        map.insert(last_num, new_pair);
+        // map.insert(last_num, new_pair);
+        let v = cached.get_mut(last_num as usize).unwrap();
+        v.0 = v.1;
+        v.1 = turn;
     }
 
     last_num
