@@ -2,12 +2,13 @@ use std::{
     collections::{HashMap, HashSet},
     io::Read,
     ops::RangeInclusive,
+    str::Lines,
 };
 
 fn main() {
     let mut str = String::new();
     std::io::stdin().read_to_string(&mut str).unwrap();
-    // println!("result part-1: {:?}", part_1(&str));
+    println!("result part-1: {:?}", part_1(&str));
     println!("result part-2: {:?}", part_2(&str));
 }
 
@@ -29,7 +30,7 @@ fn part_1(str: &str) -> u32 {
                     .map(|i| i.parse::<u32>().unwrap())
                     .for_each(|n| {
                         // validate ticket
-                        if !validate_num(&map_classes, n) {
+                        if !map_classes.contains_key(&n) {
                             sum = sum + n
                         }
                     });
@@ -41,7 +42,7 @@ fn part_1(str: &str) -> u32 {
     sum
 }
 
-fn part_2(str: &str) -> u32 {
+fn part_2(str: &str) -> u64 {
     let mut lines = str.lines();
 
     // parse classes
@@ -49,97 +50,155 @@ fn part_2(str: &str) -> u32 {
 
     // skip your ticket
     ensure_your_ticket_header(&mut lines);
+    let your_ticket: Vec<u32> = get_ticket(&mut lines).unwrap();
+    let your_ticket_locs: Vec<HashSet<usize>> = get_ticket_pos(&your_ticket, &map_classes).unwrap();
 
-    // vector of posibilities for each index
-    let your_ticket: Vec<u32> = lines
-        .next()
-        .unwrap()
-        .split(',')
-        .map(|i| i.parse::<u32>().unwrap())
-        .collect();
+    // model
+    let mut model: Vec<ModelEntry> = Vec::new();
+    for (i, v) in your_ticket_locs.iter().enumerate() {
+        model.push(ModelEntry { pos: i, set: v.clone() });
+    }
 
-    println!("your_ticket: {:?}", your_ticket);
-
-    let vec_locs: Vec<&Vec<usize>> = your_ticket
-        .iter()
-        .map(|n| match map_classes.get(&n) {
-            Some(v) => v,
-            _ => panic!("your ticket is invalid"),
-        })
-        .collect();
-
-    println!("vec_locs: {}", vec_locs.len());
-    vec_locs.iter().for_each(|i| println!("{:?}", i));
-
-    // find models
-    let mut models: Vec<Vec<usize>> = find_ticket_model(&vec_locs);
-    println!("models: {:?}", models);
-
-    // check if ticket match model
-    let model_match_provider = |model: &Vec<usize>, ticket: &Vec<u32>| {
-        ticket
-            .iter()
-            .enumerate()
-            .all(|(i, t)| match map_classes.get(t) {
-                Some(v) if v.contains(&model.get(i).unwrap()) => true,
-                _ => false,
-            })
-    };
-
-    // check if ticket is valid
-    let valid_ticket_provider = |ticket: &Vec<u32>| {
-        ticket.iter().all(|t| {
-            if let Some(_) = map_classes.get(t) {
-                true
-            } else {
-                false
-            }
-        })
-    };
-
-    // go through nearby
-    lines.next(); // empty line
+    // nearby tickets
+    lines.next();
     ensure_near_by_header(&mut lines);
-
-    // line by line
-    loop {
-        match lines.next() {
-            Some(l) => {
-                let ticket: Vec<u32> = l.split(',').map(|i| i.parse::<u32>().unwrap()).collect();
-                if valid_ticket_provider(&ticket) {
-                    println!("- ticket: {:?}", ticket);
-                    let invalid: Vec<usize> = models
-                        .iter()
-                        .enumerate()
-                        .filter(|(_, model)| !model_match_provider(*model, &ticket))
-                        .map(|(i, _)| i)
-                        .collect();
-
-                    invalid.iter().rev().for_each(|i| {
-                        let _ = models.swap_remove(*i);
-                    });
-
-                    println!("{:?}", models);
-                } else {
-                    println!("- invalid ticket: {:?}", ticket);
-                }
+    while let Some(t) = get_ticket(&mut lines) {
+        if let Some(locs) = get_ticket_pos(&t, &map_classes) {
+            // find intersection
+            for (i, v) in locs.iter().enumerate() {
+                let model_entry = model.get_mut(i).unwrap();
+                let inter: HashSet<usize> =
+                    v.intersection(&model_entry.set).map(|ele| *ele).collect();
+                model_entry.set = inter;
             }
-            _ => break, // EOF
         }
     }
 
-    if models.is_empty() {
-        panic!("no modal found")
+    // find ideal model by eliminating
+    eliminate(&mut model);
+
+    // map model
+    let mut total: u64 = 1;
+    let field_indices = get_departure(str);
+    for entry in model {
+        let ticket_col_index = entry.pos;
+        let f_index = entry.set.iter().next().unwrap();
+        if field_indices.contains(f_index) {
+            let value = your_ticket.get(ticket_col_index).unwrap();
+            total = total * (*value as u64);
+        }
     }
 
-    // index of six departures
-    let field_indices: HashSet<usize> = get_departure(str);
-    println!("departure: {:?}", field_indices);
+    total
+}
 
-    // result
-    let model = models.first().unwrap();
-    let r = your_ticket.iter().enumerate().filter(|(i, v)| field_indices.contains(&i)).map(|(i,_)| model.get(i).unwrap()).fold(1_u32, |acc, v| acc * (*v as u32));
-    r
+/// elemiate the set
+///
+///   ModelEntry { set: {12} }
+///   ModelEntry { set: {12, 15} }
+///   ModelEntry { set: {12, 15, 10} }
+///   ModelEntry { set: {15, 12, 17, 10} }
+///   ModelEntry { set: {18, 15, 12, 10, 17} }
+///   ModelEntry { set: {18, 12, 15, 17, 10, 11} }
+///   ModelEntry { set: {2, 10, 18, 12, 11, 17, 15} }
+///   ModelEntry { set: {17, 2, 18, 0, 15, 12, 11, 10} }
+///   ModelEntry { set: {0, 12, 10, 18, 2, 5, 11, 15, 17} }
+///   ModelEntry { set: {12, 17, 10, 15, 2, 11, 5, 0, 18, 1} }
+///   ModelEntry { set: {1, 11, 10, 2, 18, 17, 15, 3, 0, 12, 5} }
+///   ModelEntry { set: {2, 4, 11, 17, 5, 12, 3, 10, 15, 1, 18, 0} }
+///   ModelEntry { set: {18, 7, 5, 17, 0, 1, 12, 3, 10, 2, 15, 4, 11} }
+///   ModelEntry { set: {2, 5, 12, 1, 4, 11, 3, 15, 0, 7, 9, 10, 17, 18} }
+///   ModelEntry { set: {15, 7, 1, 9, 0, 4, 10, 17, 11, 5, 16, 18, 3, 12, 2} }
+///   ModelEntry { set: {10, 8, 3, 7, 1, 12, 11, 2, 15, 4, 9, 5, 16, 17, 18, 0} }
+///   ModelEntry { set: {17, 18, 10, 4, 5, 1, 12, 7, 8, 0, 19, 2, 9, 3, 16, 11, 15} }
+///   ModelEntry { set: {10, 2, 19, 11, 1, 4, 17, 5, 0, 9, 16, 8, 15, 18, 13, 12, 7, 3} }
+///   ModelEntry { set: {17, 15, 4, 2, 7, 8, 19, 11, 16, 9, 3, 13, 5, 6, 12, 1, 18, 10, 0} }
+///   ModelEntry { set: {17, 18, 5, 11, 2, 6, 15, 4, 8, 14, 0, 19, 7, 12, 9, 3, 13, 1, 16, 10} }
+///
+/// result single element in each set
+fn eliminate(model: &mut Vec<ModelEntry>) {
+    // get the first one
+    loop {
+        // sort first
+        model.sort_by(|a, b| a.set.len().partial_cmp(&b.set.len()).unwrap());
+
+        // there should be a single solution, the first one must has len 1
+        if model.first().unwrap().set.len() != 1 {
+            panic!("expected single solution for the set")
+        }
+
+        let mut reserved: Vec<usize> = Vec::new();
+        let mut has_updated = false;
+        model.iter_mut().for_each(|entry| {
+            if entry.set.len() == 1 {
+                reserved.push(*entry.set.iter().next().unwrap());
+            } else {
+                reserved.iter().for_each(|r| {
+                    entry.set.remove(r);
+                });
+                has_updated = true;
+            }
+        });
+
+        if !has_updated {
+            break;
+        }
+    }
+}
+
+fn get_ticket(lines: &mut Lines) -> Option<Vec<u32>> {
+    match lines.next() {
+        Some(l) => {
+            let t = l.split(',').map(|i| i.parse::<u32>().unwrap()).collect();
+            Some(t)
+        }
+        None => None,
+    }
+}
+
+fn get_ticket_pos<'a>(
+    ticket: &Vec<u32>,
+    map_classes: &HashMap<u32, Indices>,
+) -> Option<Vec<HashSet<usize>>> {
+    let mut result: Vec<HashSet<usize>> = Vec::new();
+
+    for n in ticket {
+        match map_classes.get(n) {
+            Some(v) => result.push(v.to_set()),
+            _ => return None,
+        }
+    }
+
+    Some(result)
+}
+
+#[derive(Debug, PartialEq)]
+struct ModelEntry {
+    /// the column position on the ticket
+    pos: usize,
+    set: HashSet<usize>,
+}
+
+#[derive(Debug)]
+struct Indices {
+    items: Vec<usize>,
+}
+
+impl Indices {
+    fn to_set(&self) -> HashSet<usize> {
+        let mut set: HashSet<usize> = HashSet::new();
+        self.items.iter().for_each(|i| {
+            let _ = set.insert(*i);
+        });
+        set
+    }
+}
+
+impl Clone for Indices {
+    fn clone(&self) -> Self {
+        let vec = self.items.iter().copied().collect();
+        Indices { items: vec }
+    }
 }
 
 fn get_departure(str: &str) -> HashSet<usize> {
@@ -154,7 +213,7 @@ fn get_departure(str: &str) -> HashSet<usize> {
                 match iter.next() {
                     Some("departure") => {
                         let _ = vec.insert(i);
-                    },
+                    }
                     _ => break,
                 }
             }
@@ -169,56 +228,7 @@ fn get_departure(str: &str) -> HashSet<usize> {
 fn ensure_your_ticket_header(lines: &mut std::str::Lines) {
     match lines.next() {
         Some("your ticket:") => (),
-        _ => panic!("expected 'your ticket:'"),
-    }
-}
-
-/// generate vector of completed model of the ticket
-///
-/// example input:
-/// [[0,1], [0,1], [2]]
-///
-/// output:
-///  [[0, 1, 2], [1, 0, 2]]
-///
-fn find_ticket_model(vec_locs: &Vec<&Vec<usize>>) -> Vec<Vec<usize>> {
-    // use a stack for current travel, and a cached set
-    let mut result: Vec<Vec<usize>> = Vec::new();
-    let mut stack: Vec<usize> = Vec::new();
-    let mut cached: HashSet<usize> = HashSet::new();
-    travel(&vec_locs, 0, &mut stack, &mut cached, &mut result);
-
-    result
-}
-
-fn travel(
-    vec_locs: &Vec<&Vec<usize>>,
-    index: usize,
-    stack: &mut Vec<usize>,
-    cached: &mut HashSet<usize>,
-    result: &mut Vec<Vec<usize>>,
-) {
-    match vec_locs.get(index) {
-        Some(v) => {
-            // go through value of v
-            for elem in *v {
-                if !cached.contains(elem) {
-                    stack.push(*elem);
-                    cached.insert(*elem);
-                    travel(vec_locs, index + 1, stack, cached, result);
-
-                    // pop
-                    let item = stack.pop().unwrap();
-                    cached.remove(&item);
-                }
-            }
-        }
-        _ => {
-            // end -> copy the stack
-            let id = stack.iter().copied().collect();
-            println!("id: {:?}", id);
-            result.push(id);
-        }
+        t => panic!("expected 'your ticket:' but '{:?}'", t),
     }
 }
 
@@ -239,10 +249,6 @@ fn ensure_near_by_header(lines: &mut std::str::Lines) {
     }
 }
 
-fn validate_num(map_classes: &HashMap<u32, Vec<usize>>, n: u32) -> bool {
-    map_classes.contains_key(&n)
-}
-
 /// parses lines into a map of number and class index
 ///
 /// example:
@@ -253,8 +259,8 @@ fn validate_num(map_classes: &HashMap<u32, Vec<usize>>, n: u32) -> bool {
 ///     {1:0}, {2:0}, {3,0}, {4: []}, {5:0}, {6:0}
 ///     {6:[0,1]}, [7:1], ..., [12: []], ...
 ///
-fn parse_classes(lines: &mut std::str::Lines) -> HashMap<u32, Vec<usize>> {
-    let mut map: HashMap<u32, Vec<usize>> = HashMap::new();
+fn parse_classes(lines: &mut std::str::Lines) -> HashMap<u32, Indices> {
+    let mut map: HashMap<u32, Indices> = HashMap::new();
     let mut class_index: usize = 0;
     loop {
         match lines.next() {
@@ -270,8 +276,10 @@ fn parse_classes(lines: &mut std::str::Lines) -> HashMap<u32, Vec<usize>> {
                         for range in vec_range {
                             for num in range {
                                 map.entry(num)
-                                    .and_modify(|v| v.push(class_index))
-                                    .or_insert(vec![class_index]);
+                                    .and_modify(|v| v.items.push(class_index))
+                                    .or_insert(Indices {
+                                        items: vec![class_index],
+                                    });
                             }
                         }
                     }
@@ -305,14 +313,14 @@ mod tests {
 
     #[test]
     fn test_find_ticket_model() {
-        let mut vec: Vec<&Vec<usize>> = Vec::new();
+        let mut vec: Vec<Vec<usize>> = Vec::new();
 
         let v0 = vec![0, 1];
         let v1 = vec![1, 0];
         let v2 = vec![2];
-        vec.push(&v0);
-        vec.push(&v1);
-        vec.push(&v2);
+        vec.push(v0);
+        vec.push(v1);
+        vec.push(v2);
 
         assert_eq!(vec![vec![0, 1, 2], vec![1, 0, 2]], find_ticket_model(&vec));
     }
